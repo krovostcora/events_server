@@ -42,30 +42,6 @@ router.get('/', (req, res) => {
     }
 });
 
-// GET /api/events/:id
-router.get('/:id', (req, res) => {
-    const folder = req.params.id;
-    const csvPath = path.join(EVENTS_DIR, folder, `${folder}.csv`);
-
-    if (!fs.existsSync(csvPath)) {
-        return res.status(404).send('Event not found');
-    }
-
-    try {
-        const lines = fs.readFileSync(csvPath, 'utf8').split('\n').filter(Boolean);
-        if (lines.length <= 1) return res.status(404).send('No data found');
-
-        const row = lines[1].split(';');
-        const [id, name, date, time, place] = row;
-
-        res.json({ id, name, date, time, place });
-    } catch (err) {
-        console.error('Failed to read event:', err);
-        res.status(500).send('Server error');
-    }
-});
-
-// GET /api/events/:id
 router.get('/:id', (req, res) => {
     const { id } = req.params;
     const folderPath = path.join(EVENTS_DIR, id);
@@ -75,22 +51,33 @@ router.get('/:id', (req, res) => {
         return res.status(404).json({ error: 'Event not found' });
     }
 
-    const data = fs.readFileSync(csvPath, 'utf8').split('\n').filter(Boolean);
-    if (data.length < 2) {
-        return res.status(500).json({ error: 'CSV file has no data' });
+    try {
+        const data = fs.readFileSync(csvPath, 'utf8').split('\n').filter(Boolean);
+        if (data.length < 2) {
+            return res.status(500).json({ error: 'CSV file has no data' });
+        }
+
+        const [_, row] = data;
+        const [eventId, name, date, time, place, arrival] = row.split(';');
+
+        const logoPath = path.join(folderPath, 'logo.png');
+        const hasLogo = fs.existsSync(logoPath);
+        const logoUrl = hasLogo ? `https://events-server-eu5z.onrender.com/static/${id}/logo.png` : null;
+
+        res.json({
+            id: eventId,
+            name,
+            date,
+            time,
+            place,
+            arrival,
+            logo: logoUrl,
+            folder: id,
+        });
+    } catch (err) {
+        console.error('Failed to read event:', err);
+        res.status(500).json({ error: 'Server error' });
     }
-
-    const [_, row] = data;
-    const [eventId, name, date, time, place] = row.split(';');
-
-    res.json({
-        id: eventId,
-        name,
-        date,
-        time,
-        place,
-        folder: id,
-    });
 });
 
 
