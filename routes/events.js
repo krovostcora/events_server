@@ -26,9 +26,11 @@ router.get('/', (req, res) => {
                 if (data.length > 1) {
                     const firstDataRow = data[1].split(';');
                     const name = firstDataRow[1];
+                    const date = firstDataRow[2];
                     events.push({
                         id: folder,
                         name,
+                        date,
                         folder
                     });
                 }
