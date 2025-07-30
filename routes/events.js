@@ -9,7 +9,7 @@ if (!fs.existsSync(EVENTS_DIR)) {
     fs.mkdirSync(EVENTS_DIR);
 }
 
-// GET /api/events
+// GET /api/events — отримати список подій
 router.get('/', (req, res) => {
     try {
         const folders = fs.readdirSync(EVENTS_DIR).filter(name => {
@@ -42,6 +42,7 @@ router.get('/', (req, res) => {
     }
 });
 
+// GET /api/events/:id — отримати деталі конкретної події
 router.get('/:id', (req, res) => {
     const { id } = req.params;
     const folderPath = path.join(EVENTS_DIR, id);
@@ -62,7 +63,9 @@ router.get('/:id', (req, res) => {
 
         const logoPath = path.join(folderPath, 'logo.png');
         const hasLogo = fs.existsSync(logoPath);
-        const logoUrl = hasLogo ? `https://events-server-eu5z.onrender.com/static/${id}/logo.png` : null;
+        const logoUrl = hasLogo
+            ? `https://events-server-eu5z.onrender.com/static/${id}/logo.png`
+            : null;
 
         res.json({
             id: eventId,
@@ -80,8 +83,7 @@ router.get('/:id', (req, res) => {
     }
 });
 
-
-// POST /api/events
+// POST /api/events — створити нову подію
 router.post('/', (req, res) => {
     const { csvLine, date, name } = req.body;
     if (!csvLine || !date || !name) {
@@ -98,10 +100,10 @@ router.post('/', (req, res) => {
 
         const filePath = path.join(dirPath, `${folderName}.csv`);
         if (!fs.existsSync(filePath)) {
-            fs.writeFileSync(filePath, 'id;name;date;time;place\n');
+            fs.writeFileSync(filePath, 'id;name;date;time;place;arrival\n');
         }
 
-        fs.appendFileSync(filePath, csvLine);
+        fs.appendFileSync(filePath, csvLine + '\n');
         res.status(200).send('Event saved');
     } catch (err) {
         console.error('Error saving event:', err);
