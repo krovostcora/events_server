@@ -46,6 +46,10 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
     const folder = req.params.id;
     const csvPath = path.join(EVENTS_DIR, folder, `${folder}.csv`);
+    const logoPath = path.join(folderPath, 'logo.png');
+    const hasLogo = fs.existsSync(logoPath);
+    const logoUrl = hasLogo ? `https://events-server-eu5z.onrender.com/static/${id}/logo.png` : null;
+
 
     if (!fs.existsSync(csvPath)) {
         return res.status(404).send('Event not found');
@@ -58,7 +62,15 @@ router.get('/:id', (req, res) => {
         const row = lines[1].split(';');
         const [id, name, date, time, place] = row;
 
-        res.json({ id, name, date, time, place });
+        res.json({
+            id: eventId,
+            name,
+            date,
+            time,
+            place,
+            folder: id,
+            logo: logoUrl,
+        });
     } catch (err) {
         console.error('Failed to read event:', err);
         res.status(500).send('Server error');
