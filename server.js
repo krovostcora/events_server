@@ -11,6 +11,10 @@ app.use(express.json());
 const eventsRouter = require('./routes/events');
 app.use('/api/events', eventsRouter);
 
+const eventsListRouter = require('./routes/events-list');
+app.use('/api/events', eventsListRouter);
+
+
 app.listen(PORT, () => {
     console.log(`Server listening on http://localhost:${PORT}`);
 });
