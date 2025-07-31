@@ -61,7 +61,7 @@ router.get('/:id', (req, res) => {
         }
 
         const [_, row] = data;
-        const [eventId, name, date, time, place, arrival] = row.split(';');
+        const [eventId, name, date, time, place, isRace] = row.split(';');
 
         const logoPath = path.join(folderPath, 'logo.png');
         const hasLogo = fs.existsSync(logoPath);
@@ -75,7 +75,7 @@ router.get('/:id', (req, res) => {
             date,
             time,
             place,
-            arrival,
+            isRace: isRace === 'true',
             logo: logoUrl,
             folder: id,
         });
@@ -85,11 +85,11 @@ router.get('/:id', (req, res) => {
     }
 });
 
-// POST /api/events — створити нову подію
+// POST /api/events
 router.post('/', (req, res) => {
-    const { csvLine, date, name } = req.body;
-    if (!csvLine || !date || !name) {
-        return res.status(400).send('Missing csvLine, date or name');
+    const { csvLine, date, name, isRace } = req.body;
+    if (!csvLine || !date || !name || typeof isRace === 'undefined') {
+        return res.status(400).send('Missing csvLine, date, name or isRace');
     }
 
     const folderName = `${date.replace(/-/g, '')}_${name.toLowerCase().replace(/\s+/g, '')}`;
