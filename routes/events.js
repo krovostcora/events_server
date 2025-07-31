@@ -61,7 +61,10 @@ router.get('/:id', (req, res) => {
         }
 
         const [_, row] = data;
-        const [eventId, name, date, time, place, isRace] = row.split(';');
+        const [
+            eventId, name, date, time, place, isRace,
+            ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction
+        ] = row.split(';');
 
         const logoPath = path.join(folderPath, 'logo.png');
         const hasLogo = fs.existsSync(logoPath);
@@ -76,6 +79,11 @@ router.get('/:id', (req, res) => {
             time,
             place,
             isRace: isRace === 'true',
+            ageLimit,
+            maxChildAge,
+            medicalRequired: medicalRequired === 'true',
+            teamEvent: teamEvent === 'true',
+            genderRestriction,
             logo: logoUrl,
             folder: id,
         });
@@ -87,7 +95,11 @@ router.get('/:id', (req, res) => {
 
 // POST /api/events
 router.post('/', (req, res) => {
-    const { csvLine, date, name, isRace } = req.body;
+    const {
+        csvLine, date, name, isRace, time, place,
+        ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction
+    } = req.body;
+
     if (!csvLine || !date || !name || typeof isRace === 'undefined') {
         return res.status(400).send('Missing csvLine, date, name or isRace');
     }
@@ -101,11 +113,17 @@ router.post('/', (req, res) => {
         }
 
         const filePath = path.join(dirPath, `${folderName}.csv`);
+        // Update header to include all fields
         if (!fs.existsSync(filePath)) {
-            fs.writeFileSync(filePath, 'id;name;date;time;place;arrival\n');
+            fs.writeFileSync(filePath, 'id;name;date;time;place;isRace;ageLimit;maxChildAge;medicalRequired;teamEvent;genderRestriction\n');
         }
 
-        fs.appendFileSync(filePath, csvLine + '\n');
+        // Write all fields to CSV
+        const line = [
+            req.body.id || '', name, date, time, place, isRace,
+            ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction
+        ].join(';');
+        fs.appendFileSync(filePath, line + '\n');
         res.status(200).send('Event saved');
     } catch (err) {
         console.error('Error saving event:', err);
