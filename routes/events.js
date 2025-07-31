@@ -9,7 +9,7 @@ if (!fs.existsSync(EVENTS_DIR)) {
     fs.mkdirSync(EVENTS_DIR);
 }
 
-// GET /api/events — отримати список подій
+// GET /api/events — get list of events
 router.get('/', (req, res) => {
     try {
         const folders = fs.readdirSync(EVENTS_DIR).filter(name => {
@@ -44,7 +44,7 @@ router.get('/', (req, res) => {
     }
 });
 
-// GET /api/events/:id — отримати деталі конкретної події
+// GET /api/events/:id — get event details
 router.get('/:id', (req, res) => {
     const { id } = req.params;
     const folderPath = path.join(EVENTS_DIR, id);
@@ -63,7 +63,7 @@ router.get('/:id', (req, res) => {
         const [_, row] = data;
         const [
             eventId, name, date, time, place, isRace,
-            ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction
+            ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction, description
         ] = row.split(';');
 
         const logoPath = path.join(folderPath, 'logo.png');
@@ -84,6 +84,7 @@ router.get('/:id', (req, res) => {
             medicalRequired: medicalRequired === 'true',
             teamEvent: teamEvent === 'true',
             genderRestriction,
+            description,
             logo: logoUrl,
             folder: id,
         });
@@ -93,11 +94,11 @@ router.get('/:id', (req, res) => {
     }
 });
 
-// POST /api/events
+// POST /api/events — create new event
 router.post('/', (req, res) => {
     const {
         csvLine, date, name, isRace, time, place,
-        ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction
+        ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction, description
     } = req.body;
 
     if (!csvLine || !date || !name || typeof isRace === 'undefined') {
@@ -115,13 +116,13 @@ router.post('/', (req, res) => {
         const filePath = path.join(dirPath, `${folderName}.csv`);
         // Update header to include all fields
         if (!fs.existsSync(filePath)) {
-            fs.writeFileSync(filePath, 'id;name;date;time;place;isRace;ageLimit;maxChildAge;medicalRequired;teamEvent;genderRestriction\n');
+            fs.writeFileSync(filePath, 'id;name;date;time;place;isRace;ageLimit;maxChildAge;medicalRequired;teamEvent;genderRestriction;description\n');
         }
 
         // Write all fields to CSV
         const line = [
             req.body.id || '', name, date, time, place, isRace,
-            ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction
+            ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction, description
         ].join(';');
         fs.appendFileSync(filePath, line + '\n');
         res.status(200).send('Event saved');
