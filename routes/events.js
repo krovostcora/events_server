@@ -1,12 +1,24 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const { promisify } = require('util');
 
 const router = express.Router();
 const EVENTS_DIR = path.join(__dirname, '..', 'events');
 
-if (!fs.existsSync(EVENTS_DIR)) {
-    fs.mkdirSync(EVENTS_DIR);
+// Promisify file system methods
+const mkdirAsync = promisify(fs.mkdir);
+const writeFileAsync = promisify(fs.writeFile);
+const appendFileAsync = promisify(fs.appendFile);
+const accessAsync = promisify(fs.access);
+
+// Ensure events directory exists
+async function ensureEventsDir() {
+    try {
+        await accessAsync(EVENTS_DIR);
+    } catch (err) {
+        await mkdirAsync(EVENTS_DIR, { recursive: true });
+    }
 }
 
 // GET /api/events
@@ -136,37 +148,81 @@ router.post('/', (req, res) => {
 });
 
 // POST /api/events/:id/register
-router.post('/:id/register', (req, res) => {
+router.post('/:id/register', async (req, res) => {
     const { id } = req.params;
+    const {
+        name = '',
+        surname = '',
+        gender = '',
+        age = '',
+        email = '',
+        phone = '',
+        raceRole = 'spectator',
+    } = req.body;
+
+    // Validate required fields
+    if (!name.trim() || !surname.trim() || !age) {
+        return res.status(400).json({
+            error: 'Missing required fields: name, surname, and age are required'
+        });
+    }
+
+    const ageNum = Number(age);
+    if (isNaN(ageNum) || ageNum <= 0) {
+        return res.status(400).json({
+            error: 'Age must be a positive number'
+        });
+    }
+
     const folderPath = path.join(EVENTS_DIR, id);
     const participantsPath = path.join(folderPath, 'participants.csv');
 
-    const {
-        name, surname, gender, age, email, phone, raceRole
-    } = req.body;
-
-    const parsedAge = Number(age);
-    if (!name || !surname || !parsedAge) {
-        return res.status(400).json({ error: 'Missing or invalid required fields' });
-    }
-
-
     try {
-        // Якщо participants.csv не існує — створюємо з заголовком
-        if (!fs.existsSync(participantsPath)) {
-            fs.writeFileSync(participantsPath, 'id;name;surname;gender;age;email;phone;raceRole\n');
+        await ensureEventsDir();
+
+        // Check if event folder exists
+        try {
+            await accessAsync(folderPath);
+        } catch (err) {
+            return res.status(404).json({
+                error: 'Event not found'
+            });
+        }
+
+        // Create participants file if it doesn't exist
+        try {
+            await accessAsync(participantsPath);
+        } catch (err) {
+            await writeFileAsync(
+                participantsPath,
+                'id;name;surname;gender;age;email;phone;raceRole\n'
+            );
         }
 
         const participantId = Date.now().toString();
-        const line = [
-            participantId, name, surname, gender, age, email, phone, raceRole || ''
+        const csvLine = [
+            participantId,
+            name.trim(),
+            surname.trim(),
+            gender,
+            age,
+            email.trim(),
+            phone,
+            raceRole,
         ].join(';');
 
-        fs.appendFileSync(participantsPath, line + '\n');
-        res.status(200).json({ message: 'Participant registered', id: participantId });
+        await appendFileAsync(participantsPath, csvLine + '\n');
+
+        res.json({
+            message: 'Participant registered successfully',
+            id: participantId,
+        });
     } catch (err) {
-        console.error('Error saving participant:', err);
-        res.status(500).json({ error: 'Failed to register participant' });
+        console.error('Registration error:', err);
+        res.status(500).json({
+            error: 'Failed to register participant',
+            details: err.message,
+        });
     }
 });
 
