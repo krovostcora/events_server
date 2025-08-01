@@ -168,4 +168,25 @@ router.post('/:id/register', (req, res) => {
     }
 });
 
+// GET /api/events/:id/participants
+router.get('/:id/participants', (req, res) => {
+    const { id } = req.params;
+    const participantsPath = path.join(EVENTS_DIR, id, 'participants.csv');
+    if (!fs.existsSync(participantsPath)) {
+        return res.json([]); // No participants yet
+    }
+    try {
+        const data = fs.readFileSync(participantsPath, 'utf8').split('\n').filter(Boolean);
+        const [header, ...rows] = data;
+        const fields = header.split(';');
+        const participants = rows.map(row => {
+            const values = row.split(';');
+            return Object.fromEntries(fields.map((f, i) => [f, values[i] || '']));
+        });
+        res.json(participants);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to read participants' });
+    }
+});
+
 module.exports = router;
