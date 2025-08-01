@@ -1,14 +1,4 @@
-id;name;date;time;place;isRace;ageLimit;maxChildAge;medicalRequired;teamEvent;genderRestriction;description
-301;Dmytro;Shevchenko;male;10;dmytro.shevchenko@email.com;+1234567820;
-302;Olena;Kovalchuk;female;12;olena.kovalchuk@email.com;+1234567821;
-303;Ivan;Bondar;male;8;ivan.bondar@email.com;+1234567822;
-304;Sofiia;Tkachenko;female;14;sofiia.tkachenko@email.com;+1234567823;
-305;Artem;Melnyk;male;9;artem.melnyk@email.com;+1234567824;
-306;Lucas;Martinez;male;13;lucas.martinez@argmail.com;+5491123456789;player
-307;Emma;Dubois;female;11;emma.dubois@frmail.com;+33123456789;player
-308;Mateo;Rossi;male;12;mateo.rossi@itmail.com;+390612345678;player
-309;Sophia;Nguyen;female;9;sophia.nguyen@vnmail.com;+84901234567;player
-310;Noah;Smith;male;14;noah.smith@ukmail.com;+447912345678;player
+id;name;surname;gender;age;email;phone;raceRole
 311;Mia;Kim;female;10;mia.kim@krmail.com;+821012345678;player
 312;Oliver;Johansson;male;8;oliver.johansson@semail.com;+46701234567;player
 313;Isabella;Garcia;female;13;isabella.garcia@esmail.com;+34612345678;player
