@@ -1,16 +1,13 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { promisify } = require('util');
 
 const router = express.Router();
 const EVENTS_DIR = path.join(__dirname, '..', 'events');
 
-// Promisify file system methods
-const mkdirAsync = promisify(fs.mkdir);
-const writeFileAsync = promisify(fs.writeFile);
-const appendFileAsync = promisify(fs.appendFile);
-const accessAsync = promisify(fs.access);
+if (!fs.existsSync(EVENTS_DIR)) {
+    fs.mkdirSync(EVENTS_DIR);
+}
 
 // GET /api/events
 router.get('/', (req, res) => {
@@ -139,180 +136,36 @@ router.post('/', (req, res) => {
 });
 
 // POST /api/events/:id/register
-router.post('/:id/register', async (req, res) => {
+router.post('/:id/register', (req, res) => {
     const { id } = req.params;
-
-    // Validate event ID format
-    if (!id || typeof id !== 'string' || id.length < 3) {
-        return res.status(400).json({
-            success: false,
-            error: 'Invalid event ID format'
-        });
-    }
-
-    // Extract and validate participant data
-    const {
-        name = '',
-        surname = '',
-        gender = '',
-        age = '',
-        email = '',
-        phone = '',
-        raceRole = 'spectator',
-    } = req.body;
-
-    // Validate required fields
-    const validationErrors = [];
-
-    if (!name.trim()) validationErrors.push('Name is required');
-    if (!surname.trim()) validationErrors.push('Surname is required');
-    if (!age) validationErrors.push('Age is required');
-
-    if (validationErrors.length > 0) {
-        return res.status(400).json({
-            success: false,
-            error: 'Validation failed',
-            details: validationErrors
-        });
-    }
-
-    // Validate age format
-    const ageNum = Number(age);
-    if (isNaN(ageNum) || ageNum <= 0 || ageNum > 150) {
-        return res.status(400).json({
-            success: false,
-            error: 'Invalid age',
-            details: 'Age must be a positive number between 1 and 150'
-        });
-    }
-
-    // Validate email if provided
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return res.status(400).json({
-            success: false,
-            error: 'Invalid email format'
-        });
-    }
-
-    // Prepare file paths
     const folderPath = path.join(EVENTS_DIR, id);
     const participantsPath = path.join(folderPath, 'participants.csv');
-    const eventInfoPath = path.join(folderPath, `${id}.csv`);
+
+    const {
+        name, surname, gender, age, email, phone, raceRole
+    } = req.body;
+
+    if (!name || !surname || !age) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
 
     try {
-        // Check if event exists and is valid
-        try {
-            await accessAsync(folderPath);
-            await accessAsync(eventInfoPath);
-        } catch (err) {
-            return res.status(404).json({
-                success: false,
-                error: 'Event not found or inaccessible',
-                details: `Event folder ${id} does not exist or is corrupted`
-            });
+        // Якщо participants.csv не існує — створюємо з заголовком
+        if (!fs.existsSync(participantsPath)) {
+            fs.writeFileSync(participantsPath, 'id;name;surname;gender;age;email;phone;raceRole\n');
         }
 
-        // Read event info to validate restrictions
-        const eventInfo = await readEventInfo(eventInfoPath);
-
-        // Validate against event restrictions
-        if (eventInfo.ageLimit === '18+' && ageNum < 18) {
-            return res.status(403).json({
-                success: false,
-                error: 'Age restriction',
-                details: 'This event is for participants 18+ only'
-            });
-        }
-
-        if (eventInfo.genderRestriction &&
-            eventInfo.genderRestriction !== 'any' &&
-            gender !== eventInfo.genderRestriction) {
-            return res.status(403).json({
-                success: false,
-                error: 'Gender restriction',
-                details: `This event is for ${eventInfo.genderRestriction} only`
-            });
-        }
-
-        // Create participants file if it doesn't exist
-        try {
-            await accessAsync(participantsPath);
-        } catch (err) {
-            await writeFileAsync(
-                participantsPath,
-                'id;name;surname;gender;age;email;phone;raceRole;registrationDate\n'
-            );
-        }
-
-        // Prepare participant data
         const participantId = Date.now().toString();
-        const registrationDate = new Date().toISOString();
-
-        const csvLine = [
-            participantId,
-            name.trim(),
-            surname.trim(),
-            gender,
-            age,
-            email.trim(),
-            phone,
-            eventInfo.isRace ? raceRole : '', // Only include raceRole for race events
-            registrationDate
+        const line = [
+            participantId, name, surname, gender, age, email, phone, raceRole || ''
         ].join(';');
 
-        // Append participant to file
-        await appendFileAsync(participantsPath, csvLine + '\n');
-
-        // Log successful registration
-        console.log(`New registration for event ${id}: ${name} ${surname}`);
-
-        // Return success response
-        return res.status(201).json({
-            success: true,
-            message: 'Participant registered successfully',
-            data: {
-                id: participantId,
-                name: name.trim(),
-                surname: surname.trim(),
-                eventId: id,
-                registrationDate
-            }
-        });
-
+        fs.appendFileSync(participantsPath, line + '\n');
+        res.status(200).json({ message: 'Participant registered', id: participantId });
     } catch (err) {
-        console.error('Registration error:', err);
-        return res.status(500).json({
-            success: false,
-            error: 'Internal server error',
-            details: process.env.NODE_ENV === 'development' ? err.message : undefined
-        });
+        console.error('Error saving participant:', err);
+        res.status(500).json({ error: 'Failed to register participant' });
     }
 });
 
-// Helper function to read event info
-async function readEventInfo(filePath) {
-    const data = await readFileAsync(filePath, 'utf8');
-    const lines = data.split('\n').filter(line => line.trim());
-
-    if (lines.length < 2) {
-        throw new Error('Invalid event info file');
-    }
-
-    const headers = lines[0].split(';');
-    const values = lines[1].split(';');
-
-    const eventInfo = {};
-    headers.forEach((header, index) => {
-        if (values[index]) {
-            eventInfo[header] = values[index];
-        }
-    });
-
-    // Normalize boolean values
-    if ('isRace' in eventInfo) {
-        eventInfo.isRace = eventInfo.isRace === 'true';
-    }
-
-    return eventInfo;
-}
 module.exports = router;
