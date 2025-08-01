@@ -118,6 +118,13 @@ router.post('/', (req, res) => {
         if (!fs.existsSync(filePath)) {
             fs.writeFileSync(filePath, 'id;name;date;time;place;isRace;ageLimit;maxChildAge;medicalRequired;teamEvent;genderRestriction;description\n');
         }
+// Participants CSV file
+        const participantsPath = path.join(dirPath, 'participants.csv');
+        if (!fs.existsSync(participantsPath)) {
+            fs.writeFileSync(participantsPath, 'id;name;surname;gender;age;email;phone;raceRole\n');
+        }
+
+
 
         // Write all fields to CSV
         const line = [
@@ -131,5 +138,38 @@ router.post('/', (req, res) => {
         res.status(500).send('Failed to save event');
     }
 });
+
+// POST /api/events/:id/register
+router.post('/:id/register', (req, res) => {
+    const { id } = req.params;
+    const folderPath = path.join(EVENTS_DIR, id);
+    const participantsPath = path.join(folderPath, 'participants.csv');
+
+    if (!fs.existsSync(participantsPath)) {
+        return res.status(404).json({ error: 'Participants file not found' });
+    }
+
+    const {
+        name, surname, gender, age, email, phone, raceRole
+    } = req.body;
+
+    if (!name || !surname || !age) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const participantId = Date.now().toString(); // simple unique id
+    const line = [
+        participantId, name, surname, gender, age, email, phone, raceRole || ''
+    ].join(';');
+
+    try {
+        fs.appendFileSync(participantsPath, line + '\n');
+        res.status(200).json({ message: 'Participant registered', id: participantId });
+    } catch (err) {
+        console.error('Error saving participant:', err);
+        res.status(500).json({ error: 'Failed to register participant' });
+    }
+});
+
 
 module.exports = router;
