@@ -9,7 +9,7 @@ if (!fs.existsSync(EVENTS_DIR)) {
     fs.mkdirSync(EVENTS_DIR);
 }
 
-// GET /api/events — get list of events
+// GET /api/events
 router.get('/', (req, res) => {
     try {
         const folders = fs.readdirSync(EVENTS_DIR).filter(name => {
@@ -44,7 +44,7 @@ router.get('/', (req, res) => {
     }
 });
 
-// GET /api/events/:id — get event details
+// GET /api/events/:id
 router.get('/:id', (req, res) => {
     const { id } = req.params;
     const folderPath = path.join(EVENTS_DIR, id);
@@ -86,7 +86,7 @@ router.get('/:id', (req, res) => {
             genderRestriction,
             description,
             logo: logoUrl,
-            folder: id,
+            folder: id
         });
     } catch (err) {
         console.error('Failed to read event:', err);
@@ -94,7 +94,7 @@ router.get('/:id', (req, res) => {
     }
 });
 
-// POST /api/events — create new event
+// POST /api/events
 router.post('/', (req, res) => {
     const {
         csvLine, date, name, isRace, time, place,
@@ -128,7 +128,6 @@ router.post('/', (req, res) => {
             ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction, description
         ].join(';');
         fs.appendFileSync(filePath, line + '\n');
-
         res.status(200).send('Event saved');
     } catch (err) {
         console.error('Error saving event:', err);
@@ -136,15 +135,11 @@ router.post('/', (req, res) => {
     }
 });
 
-// POST /api/events/:id/register — register participant
+// POST /api/events/:id/register
 router.post('/:id/register', (req, res) => {
     const { id } = req.params;
     const folderPath = path.join(EVENTS_DIR, id);
     const participantsPath = path.join(folderPath, 'participants.csv');
-
-    if (!fs.existsSync(participantsPath)) {
-        return res.status(404).json({ error: 'Participants file not found' });
-    }
 
     const {
         name, surname, gender, age, email, phone, raceRole
@@ -154,12 +149,17 @@ router.post('/:id/register', (req, res) => {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const participantId = Date.now().toString();
-    const line = [
-        participantId, name, surname, gender, age, email, phone, raceRole || ''
-    ].join(';');
-
     try {
+        // Якщо participants.csv не існує — створюємо з заголовком
+        if (!fs.existsSync(participantsPath)) {
+            fs.writeFileSync(participantsPath, 'id;name;surname;gender;age;email;phone;raceRole\n');
+        }
+
+        const participantId = Date.now().toString();
+        const line = [
+            participantId, name, surname, gender, age, email, phone, raceRole || ''
+        ].join(';');
+
         fs.appendFileSync(participantsPath, line + '\n');
         res.status(200).json({ message: 'Participant registered', id: participantId });
     } catch (err) {
