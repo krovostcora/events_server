@@ -1,1 +1,11 @@
 id;name;surname;gender;age;email;phone;raceRole
+95;Ella;Baker;female;22;ellabaker@gmail.com;+1234567803;participant
+96;Grace;Adams;female;19;graceadams@gmail.com;+1234567804;spectator
+97;Lily;Turner;female;25;lilyturner@gmail.com;+1234567805;participant
+98;Zoe;Evans;female;18;zoeevans@gmail.com;+1234567806;spectator
+99;Chloe;Parker;female;21;chloeparker@gmail.com;+1234567807;participant
+100;Jack;Morris;male;23;jackmorris@gmail.com;+1234567808;participant
+101;Noah;Wright;male;20;noahwright@gmail.com;+1234567809;spectator
+102;Liam;Walker;male;27;liamwalker@gmail.com;+1234567810;participant
+103;Mason;Hill;male;18;masonhill@gmail.com;+1234567811;spectator
+104;Lucas;Green;male;24;lucasgreen@gmail.com;+1234567812;participant

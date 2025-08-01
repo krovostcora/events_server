@@ -1,0 +1,6 @@
+id;name;surname;gender;age;email;phone;raceRole
+201;Anna;Peterson;female;15;anna.peterson@email.com;+1234567813;runner
+202;Max;Johnson;male;17;max.johnson@email.com;+1234567814;runner
+203;Sophie;Lee;female;22;sophie.lee@email.com;+1234567815;runner
+204;David;Kim;male;34;david.kim@email.com;+1234567816;runner
+205;Maria;Garcia;female;28;maria.garcia@email.com;+1234567817;runner
