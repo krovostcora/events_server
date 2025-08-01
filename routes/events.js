@@ -11,43 +11,6 @@ const mkdirAsync = promisify(fs.mkdir);
 const writeFileAsync = promisify(fs.writeFile);
 const appendFileAsync = promisify(fs.appendFile);
 const accessAsync = promisify(fs.access);
-const readFileAsync = promisify(fs.readFile); // Added this line
-
-// Ensure events directory exists
-async function ensureEventsDir() {
-    try {
-        await accessAsync(EVENTS_DIR);
-    } catch (err) {
-        await mkdirAsync(EVENTS_DIR, { recursive: true });
-    }
-}
-
-// Helper function to read event info
-async function readEventInfo(filePath) {
-    const data = await readFileAsync(filePath, 'utf8');
-    const lines = data.split('\n').filter(line => line.trim());
-
-    if (lines.length < 2) {
-        throw new Error('Invalid event info file');
-    }
-
-    const headers = lines[0].split(';');
-    const values = lines[1].split(';');
-
-    const eventInfo = {};
-    headers.forEach((header, index) => {
-        if (values[index]) {
-            eventInfo[header] = values[index];
-        }
-    });
-
-    // Normalize boolean values
-    if ('isRace' in eventInfo) {
-        eventInfo.isRace = eventInfo.isRace === 'true';
-    }
-
-    return eventInfo;
-}
 
 // GET /api/events
 router.get('/', (req, res) => {
@@ -215,18 +178,11 @@ router.post('/:id/register', async (req, res) => {
 
     // Validate age format
     const ageNum = Number(age);
-    if (isNaN(ageNum) {
+    if (isNaN(ageNum) || ageNum <= 0 || ageNum > 150) {
         return res.status(400).json({
             success: false,
             error: 'Invalid age',
-            details: 'Age must be a number'
-        });
-    }
-    if (ageNum <= 0 || ageNum > 150) {
-        return res.status(400).json({
-            success: false,
-            error: 'Invalid age',
-            details: 'Age must be between 1 and 150'
+            details: 'Age must be a positive number between 1 and 150'
         });
     }
 
@@ -333,4 +289,30 @@ router.post('/:id/register', async (req, res) => {
     }
 });
 
+// Helper function to read event info
+async function readEventInfo(filePath) {
+    const data = await readFileAsync(filePath, 'utf8');
+    const lines = data.split('\n').filter(line => line.trim());
+
+    if (lines.length < 2) {
+        throw new Error('Invalid event info file');
+    }
+
+    const headers = lines[0].split(';');
+    const values = lines[1].split(';');
+
+    const eventInfo = {};
+    headers.forEach((header, index) => {
+        if (values[index]) {
+            eventInfo[header] = values[index];
+        }
+    });
+
+    // Normalize boolean values
+    if ('isRace' in eventInfo) {
+        eventInfo.isRace = eventInfo.isRace === 'true';
+    }
+
+    return eventInfo;
+}
 module.exports = router;
