@@ -145,9 +145,11 @@ router.post('/:id/register', (req, res) => {
         name, surname, gender, age, email, phone, raceRole
     } = req.body;
 
-    if (!name || !surname || !age) {
-        return res.status(400).json({ error: 'Missing required fields' });
+    const parsedAge = Number(age);
+    if (!name || !surname || !parsedAge) {
+        return res.status(400).json({ error: 'Missing or invalid required fields' });
     }
+
 
     try {
         // Якщо participants.csv не існує — створюємо з заголовком
