@@ -1,4 +1,4 @@
-id;name;surname;gender;age;email;phone;raceRole
+id;name;surname;gender;age;email;phone;
 85;Emily;Clark;female;18;emilyclark@gmail.com;+1234567898;
 86;Sophia;Hall;female;18;sophiahall@gmail.com;+1234567899;
 87;Olivia;Young;female;18;oliviayoung@gmail.com;+1234567800;

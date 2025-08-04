@@ -1,4 +1,4 @@
-id;name;surname;gender;age;email;phone;raceRole
+id;name;surname;gender;age;email;phone;
 311;Mia;Kim;female;10;mia.kim@krmail.com;+821012345678;player
 312;Oliver;Johansson;male;8;oliver.johansson@semail.com;+46701234567;player
 313;Isabella;Garcia;female;13;isabella.garcia@esmail.com;+34612345678;player

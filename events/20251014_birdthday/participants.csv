@@ -1,4 +1,4 @@
-id;name;surname;gender;age;email;phone;raceRole
+id;name;surname;gender;age;email;phone;
 77;Alice;Smith;female;30;alicesmith@gmail.com;+1234567890;
 78;Bob;Johnson;male;32;bobjohnson@gmail.com;+1234567891;
 79;Charlie;Williams;male;28;charliewilliams@gmail.com;+1234567892;
