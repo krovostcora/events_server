@@ -1,2 +1,2 @@
-id;name;date;time;place;isRace;ageLimit;maxChildAge;medicalRequired;teamEvent;genderRestriction;description
-b23g4h56-2345-4abc-8765-bcdef2345678;Chess Tournament;2025-11-02;10:00;city library;false;6-14;14;no;no;any;Chess competition for children with prizes!
+id;name;date;time;place;isRace;maxChildAge;medicalRequired;teamEvent;genderRestriction;description
+b23g4h56-2345-4abc-8765-bcdef2345678;Chess Tournament;2025-11-02;10:00;city library;false;14;no;no;any;Chess competition for children with prizes!
