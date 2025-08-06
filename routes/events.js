@@ -201,6 +201,11 @@ router.post('/:id/results', (req, res) => {
     }
 
     try {
+        // Ensure the event folder exists
+        if (!fs.existsSync(folderPath)) {
+            fs.mkdirSync(folderPath, { recursive: true });
+        }
+
         const lines = ['id;time', ...results.map(r => `${r.id};${r.time}`)];
         fs.writeFileSync(resultsPath, lines.join('\n') + '\n');
         res.status(200).json({ message: 'Results saved' });
