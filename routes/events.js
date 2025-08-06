@@ -192,22 +192,26 @@ router.get('/:id/participants', (req, res) => {
 // POST /api/events/:id/results
 router.post('/:id/results', (req, res) => {
     const { id } = req.params;
-    const results = req.body.results; // [{ id, time }, ...]
+    const results = req.body.results; // [{ id, time }]
     const folderPath = path.join(EVENTS_DIR, id);
     const resultsPath = path.join(folderPath, 'results.csv');
+    const today = new Date();
+    const dateStr = `${String(today.getDate()).padStart(2, '0')}${String(today.getMonth() + 1).padStart(2, '0')}${today.getFullYear()}`;
 
     if (!Array.isArray(results)) {
         return res.status(400).json({ error: 'Results must be an array' });
     }
 
     try {
-        // Ensure the event folder exists
         if (!fs.existsSync(folderPath)) {
             fs.mkdirSync(folderPath, { recursive: true });
         }
-
-        const lines = ['id;time', ...results.map(r => `${r.id};${r.time}`)];
-        fs.writeFileSync(resultsPath, lines.join('\n') + '\n');
+        let lines = [];
+        if (!fs.existsSync(resultsPath)) {
+            lines.push('date;id;time');
+        }
+        lines = lines.concat(results.map(r => `${dateStr};${r.id};${r.time}`));
+        fs.appendFileSync(resultsPath, lines.join('\n') + '\n');
         res.status(200).json({ message: 'Results saved' });
     } catch (err) {
         console.error('Error saving results:', err);
@@ -220,7 +224,7 @@ router.get('/:id/results', (req, res) => {
     const { id } = req.params;
     const resultsPath = path.join(EVENTS_DIR, id, 'results.csv');
     if (!fs.existsSync(resultsPath)) {
-        return res.json([]); // No results yet
+        return res.json([]);
     }
     try {
         const data = fs.readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean);
