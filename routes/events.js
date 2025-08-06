@@ -189,6 +189,48 @@ router.get('/:id/participants', (req, res) => {
     }
 });
 
+// POST /api/events/:id/results
+router.post('/:id/results', (req, res) => {
+    const { id } = req.params;
+    const results = req.body.results; // [{ id, time }, ...]
+    const folderPath = path.join(EVENTS_DIR, id);
+    const resultsPath = path.join(folderPath, 'results.csv');
+
+    if (!Array.isArray(results)) {
+        return res.status(400).json({ error: 'Results must be an array' });
+    }
+
+    try {
+        const lines = ['id;time', ...results.map(r => `${r.id};${r.time}`)];
+        fs.writeFileSync(resultsPath, lines.join('\n') + '\n');
+        res.status(200).json({ message: 'Results saved' });
+    } catch (err) {
+        console.error('Error saving results:', err);
+        res.status(500).json({ error: 'Failed to save results' });
+    }
+});
+
+// GET /api/events/:id/results
+router.get('/:id/results', (req, res) => {
+    const { id } = req.params;
+    const resultsPath = path.join(EVENTS_DIR, id, 'results.csv');
+    if (!fs.existsSync(resultsPath)) {
+        return res.json([]); // No results yet
+    }
+    try {
+        const data = fs.readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean);
+        const [header, ...rows] = data;
+        const fields = header.split(';');
+        const results = rows.map(row => {
+            const values = row.split(';');
+            return Object.fromEntries(fields.map((f, i) => [f, values[i] || '']));
+        });
+        res.json(results);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to read results' });
+    }
+});
+
 // DELETE /api/events/:eventId/participants/:participantId
 router.delete('/:eventId/participants/:participantId', (req, res) => {
     const { eventId, participantId } = req.params;
