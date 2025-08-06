@@ -206,11 +206,27 @@ router.post('/:id/results', (req, res) => {
         if (!fs.existsSync(folderPath)) {
             fs.mkdirSync(folderPath, { recursive: true });
         }
+
+        // визначити останній raceId
+        let raceId = 1;
+        if (fs.existsSync(resultsPath)) {
+            const lines = fs.readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean);
+            const [header, ...rows] = lines;
+            const lastRaceIds = rows
+                .map(row => row.split(';'))
+                .filter(cols => cols[0] === dateStr)
+                .map(cols => parseInt(cols[1], 10))
+                .filter(n => !isNaN(n));
+
+            raceId = lastRaceIds.length > 0 ? Math.max(...lastRaceIds) + 1 : 1;
+        }
+
         let lines = [];
         if (!fs.existsSync(resultsPath)) {
-            lines.push('date;id;time');
+            lines.push('date;raceId;id;time');
         }
-        lines = lines.concat(results.map(r => `${dateStr};${r.id};${r.time}`));
+
+        lines = lines.concat(results.map(r => `${dateStr};${raceId};${r.id};${r.time}`));
         fs.appendFileSync(resultsPath, lines.join('\n') + '\n');
         res.status(200).json({ message: 'Results saved' });
     } catch (err) {
@@ -218,6 +234,7 @@ router.post('/:id/results', (req, res) => {
         res.status(500).json({ error: 'Failed to save results' });
     }
 });
+
 
 // GET /api/events/:id/results
 router.get('/:id/results', (req, res) => {
