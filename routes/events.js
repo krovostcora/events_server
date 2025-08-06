@@ -235,7 +235,6 @@ router.post('/:id/results', (req, res) => {
     }
 });
 
-
 // GET /api/events/:id/results
 router.get('/:id/results', (req, res) => {
     const { id } = req.params;
@@ -254,6 +253,32 @@ router.get('/:id/results', (req, res) => {
         res.json(results);
     } catch (err) {
         res.status(500).json({ error: 'Failed to read results' });
+    }
+});
+
+// DELETE /api/events/:id/results
+router.delete('/:id/results', (req, res) => {
+    const { id } = req.params;
+    const { date, entryId } = req.body; // entryId — це ID учасника
+
+    const resultsPath = path.join(EVENTS_DIR, id, 'results.csv');
+    if (!fs.existsSync(resultsPath)) {
+        return res.status(404).json({ error: 'Results file not found' });
+    }
+
+    try {
+        const data = fs.readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean);
+        const [header, ...rows] = data;
+        const updatedRows = rows.filter(row => {
+            const [rowDate, rowId] = row.split(';');
+            return !(rowDate === date && rowId === entryId);
+        });
+        const newContent = [header, ...updatedRows].join('\n') + '\n';
+        fs.writeFileSync(resultsPath, newContent, 'utf8');
+        res.status(200).json({ message: 'Result deleted' });
+    } catch (err) {
+        console.error('Error deleting result:', err);
+        res.status(500).json({ error: 'Failed to delete result' });
     }
 });
 
