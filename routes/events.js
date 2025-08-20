@@ -220,8 +220,14 @@ router.get('/:id/participants', (req, res) => {
 });
 
 router.delete('/:eventId/participants/:participantId', (req, res) => {
+    const ev = getEventByParam(req.params.eventId);
+    if (!ev) return res.status(404).json({ error: 'Event not found' });
+
     try {
-        const info = db.prepare('DELETE FROM participants WHERE id = ?').run(String(req.params.participantId));
+        const info = db
+            .prepare('DELETE FROM participants WHERE event_id = ? AND id = ?')
+            .run(ev.id, String(req.params.participantId));
+
         if (info.changes === 0) {
             return res.status(404).json({ error: 'Participant not found' });
         }
@@ -281,18 +287,26 @@ router.post('/:id/results', (req, res) => {
     try {
         let raceId = body.raceId ? Number(body.raceId) : null;
         if (!raceId || Number.isNaN(raceId)) {
-            const row = db.prepare('SELECT COALESCE(MAX(race_id),0) AS maxRace FROM results WHERE event_id = ? AND date = ?').get(ev.id, dateStr);
+            const row = db
+                .prepare('SELECT COALESCE(MAX(race_id),0) AS maxRace FROM results WHERE event_id = ? AND date = ?')
+                .get(ev.id, dateStr);
             raceId = Number(row.maxRace) + 1;
         }
 
         const insert = db.prepare(`
-      INSERT INTO results (event_id, date, race_id, participant_id, time)
-      VALUES (?, ?, ?, ?, ?)
-    `);
+            INSERT INTO results (event_id, date, race_id, participant_id, time)
+            VALUES (?, ?, ?, ?, ?)
+        `);
 
         const tx = db.transaction((arr) => {
             for (const r of arr) {
-                insert.run(ev.id, dateStr, raceId, String(r.id), String(r.time));
+                insert.run(
+                    ev.id,
+                    dateStr,
+                    raceId,
+                    Number(r.id),   // 🔑 зберігаємо як число
+                    String(r.time)
+                );
             }
         });
         tx(items);
