@@ -1,334 +1,158 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
+const db = require('../db'); // підключення до SQLite (events.db)
 
 const router = express.Router();
-const EVENTS_DIR = path.join(__dirname, '..', 'events');
 
-if (!fs.existsSync(EVENTS_DIR)) {
-    fs.mkdirSync(EVENTS_DIR);
-}
+// ------------------------- EVENTS -------------------------
 
-// GET /api/events
+// GET /api/events – список всіх подій
 router.get('/', (req, res) => {
-    try {
-        const folders = fs.readdirSync(EVENTS_DIR).filter(name => {
-            const fullPath = path.join(EVENTS_DIR, name);
-            return fs.statSync(fullPath).isDirectory();
-        });
-
-        const events = [];
-
-        folders.forEach(folder => {
-            const csvPath = path.join(EVENTS_DIR, folder, `${folder}.csv`);
-            if (fs.existsSync(csvPath)) {
-                const data = fs.readFileSync(csvPath, 'utf8').split('\n').filter(Boolean);
-                if (data.length > 1) {
-                    const firstDataRow = data[1].split(';');
-                    const name = firstDataRow[1];
-                    const date = firstDataRow[2];
-                    events.push({
-                        id: folder,
-                        name,
-                        date,
-                        folder
-                    });
-                }
-            }
-        });
-
-        res.json(events);
-    } catch (err) {
-        console.error('Error reading events:', err);
-        res.status(500).json({ error: 'Failed to read events' });
-    }
+    db.all('SELECT * FROM events', (err, rows) => {
+        if (err) {
+            console.error('Error fetching events:', err);
+            return res.status(500).json({ error: 'Failed to fetch events' });
+        }
+        res.json(rows);
+    });
 });
 
-// GET /api/events/:id
+// GET /api/events/:id – деталі однієї події
 router.get('/:id', (req, res) => {
-    const { id } = req.params;
-    const folderPath = path.join(EVENTS_DIR, id);
-    const csvPath = path.join(folderPath, `${id}.csv`);
+    const eventId = req.params.id;
 
-    if (!fs.existsSync(csvPath)) {
-        return res.status(404).json({ error: 'Event not found' });
-    }
-
-    try {
-        const data = fs.readFileSync(csvPath, 'utf8').split('\n').filter(Boolean);
-        if (data.length < 2) {
-            return res.status(500).json({ error: 'CSV file has no data' });
+    db.get('SELECT * FROM events WHERE id = ?', [eventId], (err, event) => {
+        if (err) {
+            console.error('Error fetching event:', err);
+            return res.status(500).json({ error: 'Failed to fetch event' });
+        }
+        if (!event) {
+            return res.status(404).json({ error: 'Event not found' });
         }
 
-        const [_, row] = data;
-        const [
-            eventId, name, date, time, place, isRace,
-            ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction, description
-        ] = row.split(';');
-
-        const logoPath = path.join(folderPath, 'logo.png');
-        const hasLogo = fs.existsSync(logoPath);
-        const logoUrl = hasLogo
-            ? `https://events-server-eu5z.onrender.com/static/${id}/logo.png`
-            : null;
-
-        res.json({
-            id: eventId,
-            name,
-            date,
-            time,
-            place,
-            isRace: isRace === 'true',
-            ageLimit,
-            maxChildAge,
-            medicalRequired: medicalRequired === 'true',
-            teamEvent: teamEvent === 'true',
-            genderRestriction,
-            description,
-            logo: logoUrl,
-            folder: id
-        });
-    } catch (err) {
-        console.error('Failed to read event:', err);
-        res.status(500).json({ error: 'Server error' });
-    }
+        // logo зберігати будемо в папці /static, тому лишаємо поле
+        const logoUrl = `https://events-server-eu5z.onrender.com/static/${eventId}/logo.png`;
+        res.json({ ...event, logo: logoUrl });
+    });
 });
 
-// POST /api/events
+// POST /api/events – створити нову подію
 router.post('/', (req, res) => {
     const {
-        csvLine, date, name, isRace, time, place,
-        ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction, description
+        name, date, time, place, isRace,
+        ageLimit, maxChildAge, medicalRequired, teamEvent,
+        genderRestriction, description
     } = req.body;
 
-    if (!csvLine || !date || !name || typeof isRace === 'undefined') {
-        return res.status(400).send('Missing csvLine, date, name or isRace');
+    if (!name || !date) {
+        return res.status(400).json({ error: 'Missing required fields: name, date' });
     }
 
-    const folderName = `${date.replace(/-/g, '')}_${name.toLowerCase().replace(/\s+/g, '')}`;
-    const dirPath = path.join(EVENTS_DIR, folderName);
+    const sql = `
+    INSERT INTO events (name, date, time, place, isRace, ageLimit, maxChildAge,
+                        medicalRequired, teamEvent, genderRestriction, description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
 
-    try {
-        if (!fs.existsSync(dirPath)) {
-            fs.mkdirSync(dirPath, { recursive: true });
+    db.run(sql,
+        [name, date, time, place, isRace ? 1 : 0, ageLimit, maxChildAge,
+            medicalRequired ? 1 : 0, teamEvent ? 1 : 0, genderRestriction, description],
+        function (err) {
+            if (err) {
+                console.error('Error inserting event:', err);
+                return res.status(500).json({ error: 'Failed to create event' });
+            }
+            res.status(201).json({ id: this.lastID, name, date });
         }
-
-        const filePath = path.join(dirPath, `${folderName}.csv`);
-        if (!fs.existsSync(filePath)) {
-            fs.writeFileSync(filePath, 'id;name;date;time;place;isRace;ageLimit;maxChildAge;medicalRequired;teamEvent;genderRestriction;description\n');
-        }
-
-        const participantsPath = path.join(dirPath, 'participants.csv');
-        if (!fs.existsSync(participantsPath)) {
-            fs.writeFileSync(participantsPath, 'id;name;surname;gender;age;email;phone;raceRole\n');
-        }
-
-        const line = [
-            req.body.id || '', name, date, time, place, isRace,
-            ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction, description
-        ].join(';');
-        fs.appendFileSync(filePath, line + '\n');
-        res.status(200).send('Event saved');
-    } catch (err) {
-        console.error('Error saving event:', err);
-        res.status(500).send('Failed to save event');
-    }
+    );
 });
 
-// POST /api/events/:id/register
-router.post('/:id/register', (req, res) => {
-    const { id } = req.params;
-    const folderPath = path.join(EVENTS_DIR, id);
-    const participantsPath = path.join(folderPath, 'participants.csv');
+// ------------------------- PARTICIPANTS -------------------------
 
-    const {
-        name, surname, gender, age, email, phone, raceRole
-    } = req.body;
+// POST /api/events/:id/register – зареєструвати учасника
+router.post('/:id/register', (req, res) => {
+    const eventId = req.params.id;
+    const { name, surname, gender, age, email, phone, raceRole } = req.body;
 
     if (!name || !surname || !age) {
-        return res.status(400).json({ error: 'Missing required fields' });
+        return res.status(400).json({ error: 'Missing required fields: name, surname, age' });
     }
 
-    try {
-        // Якщо participants.csv не існує — створюємо з заголовком
-        if (!fs.existsSync(participantsPath)) {
-            fs.writeFileSync(participantsPath, 'id;name;surname;gender;age;email;phone;raceRole\n');
+    const sql = `
+        INSERT INTO participants (event_id, name, surname, gender, age, email, phone, raceRole)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    db.run(sql,
+        [eventId, name, surname, gender, age, email, phone, raceRole || ''],
+        function (err) {
+            if (err) {
+                console.error('Error inserting participant:', err);
+                return res.status(500).json({ error: 'Failed to register participant' });
+            }
+            res.status(201).json({
+                id: this.lastID,
+                event_id: eventId,
+                name, surname, gender, age, email, phone, raceRole
+            });
         }
-
-        const participantId = Date.now().toString();
-        const line = [
-            participantId, name, surname, gender, age, email, phone, raceRole || ''
-        ].join(';');
-
-        fs.appendFileSync(participantsPath, line + '\n');
-        res.status(200).json({ message: 'Participant registered', id: participantId });
-    } catch (err) {
-        console.error('Error saving participant:', err);
-        res.status(500).json({ error: 'Failed to register participant' });
-    }
+    );
 });
 
-// GET /api/events/:id/participants
+// GET /api/events/:id/participants – список учасників події
 router.get('/:id/participants', (req, res) => {
-    const { id } = req.params;
-    const participantsPath = path.join(EVENTS_DIR, id, 'participants.csv');
-    if (!fs.existsSync(participantsPath)) {
-        return res.json([]); // No participants yet
-    }
-    try {
-        const data = fs.readFileSync(participantsPath, 'utf8').split('\n').filter(Boolean);
-        const [header, ...rows] = data;
-        const fields = header.split(';');
-        const participants = rows.map(row => {
-            const values = row.split(';');
-            return Object.fromEntries(fields.map((f, i) => [f, values[i] || '']));
-        });
-        res.json(participants);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to read participants' });
-    }
-});
+    const eventId = req.params.id;
 
-// POST /api/events/:id/results
-router.post('/:id/results', (req, res) => {
-    const { id } = req.params;
-    const results = req.body.results; // [{ id, time }]
-    const folderPath = path.join(EVENTS_DIR, id);
-    const resultsPath = path.join(folderPath, 'results.csv');
-    const today = new Date();
-    const dateStr = `${String(today.getDate()).padStart(2, '0')}${String(today.getMonth() + 1).padStart(2, '0')}${today.getFullYear()}`;
-
-    if (!Array.isArray(results)) {
-        return res.status(400).json({ error: 'Results must be an array' });
-    }
-
-    try {
-        if (!fs.existsSync(folderPath)) {
-            fs.mkdirSync(folderPath, { recursive: true });
+    db.all('SELECT * FROM participants WHERE event_id = ?', [eventId], (err, rows) => {
+        if (err) {
+            console.error('Error fetching participants:', err);
+            return res.status(500).json({ error: 'Failed to fetch participants' });
         }
-
-        // визначити останній raceId
-        let raceId = 1;
-        if (fs.existsSync(resultsPath)) {
-            const lines = fs.readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean);
-            const [header, ...rows] = lines;
-            const lastRaceIds = rows
-                .map(row => row.split(';'))
-                .filter(cols => cols[0] === dateStr)
-                .map(cols => parseInt(cols[1], 10))
-                .filter(n => !isNaN(n));
-
-            raceId = lastRaceIds.length > 0 ? Math.max(...lastRaceIds) + 1 : 1;
-        }
-
-        let lines = [];
-        if (!fs.existsSync(resultsPath)) {
-            lines.push('date;raceId;id;time');
-        }
-
-        lines = lines.concat(results.map(r => `${dateStr};${raceId};${r.id};${r.time}`));
-        fs.appendFileSync(resultsPath, lines.join('\n') + '\n');
-        res.status(200).json({ message: 'Results saved' });
-    } catch (err) {
-        console.error('Error saving results:', err);
-        res.status(500).json({ error: 'Failed to save results' });
-    }
+        res.json(rows);
+    });
 });
 
-// GET /api/events/:id/results
-router.get('/:id/results', (req, res) => {
-    const { id } = req.params;
-    const resultsPath = path.join(EVENTS_DIR, id, 'results.csv');
-    if (!fs.existsSync(resultsPath)) {
-        return res.json([]);
-    }
-    try {
-        const data = fs.readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean);
-        const [header, ...rows] = data;
-        const fields = header.split(';');
-        const results = rows.map(row => {
-            const values = row.split(';');
-            return Object.fromEntries(fields.map((f, i) => [f, values[i] || '']));
-        });
-        res.json(results);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to read results' });
-    }
-});
-
-// DELETE /api/events/:id/results/:date
-router.delete('/:id/results/:date', (req, res) => {
-    const { id, date } = req.params;
-    const resultsPath = path.join(EVENTS_DIR, id, 'results.csv');
-
-    if (!fs.existsSync(resultsPath)) {
-        return res.status(404).json({ error: 'Results file not found' });
-    }
-
-    try {
-        const data = fs.readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean);
-        const [header, ...rows] = data;
-        const updatedRows = rows.filter(row => {
-            const [rowDate] = row.split(';');
-            return rowDate !== date;
-        });
-
-        const newContent = [header, ...updatedRows].join('\n') + '\n';
-        fs.writeFileSync(resultsPath, newContent, 'utf8');
-        res.status(200).json({ message: 'Group deleted' });
-    } catch (err) {
-        console.error('Error deleting group:', err);
-        res.status(500).json({ error: 'Failed to delete result group' });
-    }
-});
-
-
-// DELETE /api/events/:eventId/participants/:participantId
+// DELETE /api/events/:eventId/participants/:participantId – видалити учасника
 router.delete('/:eventId/participants/:participantId', (req, res) => {
     const { eventId, participantId } = req.params;
-    const participantsPath = path.join(EVENTS_DIR, eventId, 'participants.csv');
 
-    if (!fs.existsSync(participantsPath)) {
-        return res.status(404).json({ error: 'Participants file not found' });
-    }
-
-    try {
-        const data = fs.readFileSync(participantsPath, 'utf8').split('\n').filter(Boolean);
-        const [header, ...rows] = data;
-        const filtered = rows.filter(row => !row.startsWith(participantId + ';'));
-        fs.writeFileSync(participantsPath, [header, ...filtered].join('\n') + '\n');
-        res.status(200).json({ message: 'Participant deleted' });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to delete participant' });
-    }
+    db.run('DELETE FROM participants WHERE id = ? AND event_id = ?', [participantId, eventId], function (err) {
+        if (err) {
+            console.error('Error deleting participant:', err);
+            return res.status(500).json({ error: 'Failed to delete participant' });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ error: 'Participant not found' });
+        }
+        res.json({ message: 'Participant deleted' });
+    });
 });
 
-// PUT /api/events/:eventId/participants/:participantId
+// PUT /api/events/:eventId/participants/:participantId – оновити учасника
 router.put('/:eventId/participants/:participantId', (req, res) => {
     const { eventId, participantId } = req.params;
-    const participantsPath = path.join(EVENTS_DIR, eventId, 'participants.csv');
+    const { name, surname, gender, age, email, phone, raceRole } = req.body;
 
-    if (!fs.existsSync(participantsPath)) {
-        return res.status(404).json({ error: 'Participants file not found' });
-    }
+    const sql = `
+    UPDATE participants
+    SET name = ?, surname = ?, gender = ?, age = ?, email = ?, phone = ?, raceRole = ?
+    WHERE id = ? AND event_id = ?
+  `;
 
-    try {
-        const data = fs.readFileSync(participantsPath, 'utf8').split('\n').filter(Boolean);
-        const [header, ...rows] = data;
-        const updatedRows = rows.map(row => {
-            if (!row.startsWith(participantId + ';')) return row;
-            const {
-                name, surname, gender, age, email, phone, raceRole
-            } = req.body;
-            return [
-                participantId, name, surname, gender, age, email, phone, raceRole || ''
-            ].join(';');
-        });
-        fs.writeFileSync(participantsPath, [header, ...updatedRows].join('\n') + '\n');
-        res.status(200).json({ message: 'Participant updated' });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to update participant' });
-    }
+    db.run(sql,
+        [name, surname, gender, age, email, phone, raceRole, participantId, eventId],
+        function (err) {
+            if (err) {
+                console.error('Error updating participant:', err);
+                return res.status(500).json({ error: 'Failed to update participant' });
+            }
+            if (this.changes === 0) {
+                return res.status(404).json({ error: 'Participant not found' });
+            }
+            res.json({ message: 'Participant updated' });
+        }
+    );
 });
+
 
 module.exports = router;
