@@ -2,9 +2,12 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const multer = require('multer');
 const db = require('../data/db');
 
 const router = express.Router();
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 const EVENTS_DIR = path.join(__dirname, '..', 'events');
 if (!fs.existsSync(EVENTS_DIR)) {
@@ -18,6 +21,19 @@ function toBool(x) {
     return false;
 }
 
+function ensureEventFolder(folder) {
+    const p = path.join(EVENTS_DIR, folder);
+    if (!fs.existsSync(p)) {
+        fs.mkdirSync(p, { recursive: true });
+    }
+}
+
+function saveLogoBuffer(folder, buffer) {
+    ensureEventFolder(folder);
+    const filePath = path.join(EVENTS_DIR, folder, 'logo.png');
+    fs.writeFileSync(filePath, buffer);
+}
+
 function logoUrl(req, folder) {
     const base = `${req.protocol}://${req.get('host')}`;
     const file = path.join(EVENTS_DIR, folder, 'logo.png');
@@ -28,11 +44,12 @@ function getEventByFolder(folder) {
     return db.prepare('SELECT * FROM events WHERE folder = ?').get(folder);
 }
 
-function ensureEventFolder(folder) {
-    const p = path.join(EVENTS_DIR, folder);
-    if (!fs.existsSync(p)) {
-        fs.mkdirSync(p, { recursive: true });
-    }
+function getEventById(id) {
+    return db.prepare('SELECT * FROM events WHERE id = ?').get(id);
+}
+
+function getEventByParam(param) {
+    return getEventByFolder(param) || getEventById(param);
 }
 
 router.get('/', (req, res) => {
@@ -46,8 +63,7 @@ router.get('/', (req, res) => {
 
 router.get('/:id', (req, res) => {
     try {
-        const folder = req.params.id;
-        const ev = getEventByFolder(folder);
+        const ev = getEventByParam(req.params.id);
         if (!ev) return res.status(404).json({ error: 'Event not found' });
         res.json({
             id: ev.id,
@@ -70,7 +86,8 @@ router.get('/:id', (req, res) => {
     }
 });
 
-router.post('/', (req, res) => {
+router.post('/', upload.single('logo'), (req, res) => {
+    const body = req.body || {};
     const {
         id,
         date,
@@ -83,14 +100,16 @@ router.post('/', (req, res) => {
         medicalRequired,
         teamEvent,
         genderRestriction,
-        description
-    } = req.body;
+        description,
+        logoBase64
+    } = body;
 
     if (!date || !name || typeof isRace === 'undefined') {
         return res.status(400).send('Missing date, name or isRace');
     }
 
     const folderName = `${String(date).replace(/-/g, '')}_${String(name).toLowerCase().replace(/\s+/g, '')}`;
+
     try {
         ensureEventFolder(folderName);
 
@@ -116,6 +135,15 @@ router.post('/', (req, res) => {
             typeof description === 'undefined' ? null : String(description)
         );
 
+        if (req.file && req.file.buffer) {
+            saveLogoBuffer(folderName, req.file.buffer);
+        } else if (logoBase64) {
+            const m = String(logoBase64).match(/^data:image\/(png|jpg|jpeg);base64,(.+)$/i);
+            const data = m ? m[2] : String(logoBase64);
+            const buf = Buffer.from(data, 'base64');
+            saveLogoBuffer(folderName, buf);
+        }
+
         res.status(200).send('Event saved');
     } catch (e) {
         if (String(e.message || '').includes('UNIQUE constraint failed: events.folder')) {
@@ -125,21 +153,33 @@ router.post('/', (req, res) => {
     }
 });
 
+router.post('/:id/logo', upload.single('logo'), (req, res) => {
+    try {
+        const ev = getEventByParam(req.params.id);
+        if (!ev) return res.status(404).json({ error: 'Event not found' });
+        if (!(req.file && req.file.buffer)) return res.status(400).json({ error: 'Logo file is required' });
+        saveLogoBuffer(ev.folder, req.file.buffer);
+        res.status(200).json({ message: 'Logo saved', url: logoUrl(req, ev.folder) });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to save logo' });
+    }
+});
+
 router.post('/:id/register', (req, res) => {
-    const folder = req.params.id;
-    const { name, surname, gender, age, email, phone, raceRole } = req.body;
+    const ev = getEventByParam(req.params.id);
+    if (!ev) return res.status(404).json({ error: 'Event not found' });
+
+    const { name, surname, gender, age, email, phone, raceRole } = req.body || {};
     if (!name || !surname || typeof age === 'undefined') {
         return res.status(400).json({ error: 'Missing required fields' });
     }
-    const ev = getEventByFolder(folder);
-    if (!ev) return res.status(404).json({ error: 'Event not found' });
 
     try {
         const participantId = Date.now().toString();
         db.prepare(`
-      INSERT INTO participants (id, event_id, name, surname, gender, age, email, phone, race_role)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+            INSERT INTO participants (id, event_id, name, surname, gender, age, email, phone, race_role)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
             participantId,
             ev.id,
             name || null,
@@ -157,8 +197,7 @@ router.post('/:id/register', (req, res) => {
 });
 
 router.get('/:id/participants', (req, res) => {
-    const folder = req.params.id;
-    const ev = getEventByFolder(folder);
+    const ev = getEventByParam(req.params.id);
     if (!ev) return res.json([]);
     try {
         const rows = db
@@ -180,42 +219,92 @@ router.get('/:id/participants', (req, res) => {
     }
 });
 
-router.post('/:id/results', (req, res) => {
-    const folder = req.params.id;
-    const { results } = req.body;
-    if (!Array.isArray(results)) {
-        return res.status(400).json({ error: 'Results must be an array' });
+router.delete('/:eventId/participants/:participantId', (req, res) => {
+    try {
+        const info = db.prepare('DELETE FROM participants WHERE id = ?').run(String(req.params.participantId));
+        if (info.changes === 0) {
+            return res.status(404).json({ error: 'Participant not found' });
+        }
+        res.status(200).json({ message: 'Participant deleted' });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to delete participant' });
     }
-    const ev = getEventByFolder(folder);
-    if (!ev) return res.status(404).json({ error: 'Event not found' });
+});
 
-    const now = new Date();
-    const dateStr = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${now.getFullYear()}`;
+router.put('/:eventId/participants/:participantId', (req, res) => {
+    const ev = getEventByParam(req.params.eventId);
+    if (!ev) return res.status(404).json({ error: 'Participants table not found' });
+
+    const { name, surname, gender, age, email, phone, raceRole } = req.body || {};
 
     try {
-        const row = db.prepare('SELECT MAX(race_id) AS maxRace FROM results WHERE event_id = ? AND date = ?').get(ev.id, dateStr);
-        const nextRace = (row && row.maxRace ? Number(row.maxRace) : 0) + 1;
+        const info = db.prepare(`
+      UPDATE participants
+      SET name = ?, surname = ?, gender = ?, age = ?, email = ?, phone = ?, race_role = ?
+      WHERE event_id = ? AND id = ?
+    `).run(
+            name || null,
+            surname || null,
+            gender || null,
+            typeof age === 'undefined' || age === '' ? null : Number(age),
+            email || null,
+            phone || null,
+            raceRole || null,
+            ev.id,
+            String(req.params.participantId)
+        );
+
+        if (info.changes === 0) {
+            return res.status(404).json({ error: 'Participant not found' });
+        }
+
+        res.status(200).json({ message: 'Participant updated' });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to update participant' });
+    }
+});
+
+router.post('/:id/results', (req, res) => {
+    const ev = getEventByParam(req.params.id);
+    if (!ev) return res.status(404).json({ error: 'Event not found' });
+    if (!ev.is_race) return res.status(400).json({ error: 'Event is not a race' });
+
+    const body = req.body || {};
+    const items = Array.isArray(body.results) ? body.results : [];
+    if (!items.length) return res.status(400).json({ error: 'Results must be a non-empty array' });
+
+    const providedDate = body.date ? String(body.date).replace(/\D/g, '') : null;
+    const now = new Date();
+    const today = `${String(now.getDate()).padStart(2,'0')}${String(now.getMonth()+1).padStart(2,'0')}${now.getFullYear()}`;
+    const dateStr = providedDate && providedDate.length === 8 ? providedDate : today;
+
+    try {
+        let raceId = body.raceId ? Number(body.raceId) : null;
+        if (!raceId || Number.isNaN(raceId)) {
+            const row = db.prepare('SELECT COALESCE(MAX(race_id),0) AS maxRace FROM results WHERE event_id = ? AND date = ?').get(ev.id, dateStr);
+            raceId = Number(row.maxRace) + 1;
+        }
 
         const insert = db.prepare(`
       INSERT INTO results (event_id, date, race_id, participant_id, time)
       VALUES (?, ?, ?, ?, ?)
     `);
-        const tx = db.transaction((items) => {
-            for (const r of items) {
-                insert.run(ev.id, dateStr, nextRace, String(r.id), String(r.time));
+
+        const tx = db.transaction((arr) => {
+            for (const r of arr) {
+                insert.run(ev.id, dateStr, raceId, String(r.id), String(r.time));
             }
         });
-        tx(results);
+        tx(items);
 
-        res.status(200).json({ message: 'Results saved' });
+        res.status(200).json({ message: 'Results saved', date: dateStr, raceId });
     } catch (e) {
         res.status(500).json({ error: 'Failed to save results' });
     }
 });
 
 router.get('/:id/results', (req, res) => {
-    const folder = req.params.id;
-    const ev = getEventByFolder(folder);
+    const ev = getEventByParam(req.params.id);
     if (!ev) return res.json([]);
     try {
         const rows = db
@@ -234,68 +323,18 @@ router.get('/:id/results', (req, res) => {
 });
 
 router.delete('/:id/results/:date', (req, res) => {
-    const folder = req.params.id;
-    const date = req.params.date;
-    const ev = getEventByFolder(folder);
-    if (!ev) return res.status(404).json({ error: 'Results file not found' });
+    const ev = getEventByParam(req.params.id);
+    if (!ev) return res.status(404).json({ error: 'Results not found' });
+    const date = String(req.params.date).replace(/\D/g, '');
+    if (date.length !== 8) return res.status(400).json({ error: 'Invalid date' });
     try {
-        const info = db.prepare('DELETE FROM results WHERE event_id = ? AND date = ?').run(ev.id, String(date));
+        const info = db.prepare('DELETE FROM results WHERE event_id = ? AND date = ?').run(ev.id, date);
         if (info.changes === 0) {
             return res.status(404).json({ error: 'Group not found' });
         }
         res.status(200).json({ message: 'Group deleted' });
     } catch (e) {
         res.status(500).json({ error: 'Failed to delete result group' });
-    }
-});
-
-router.delete('/:eventId/participants/:participantId', (req, res) => {
-    const folder = req.params.eventId;
-    const participantId = req.params.participantId;
-    const ev = getEventByFolder(folder);
-    if (!ev) return res.status(404).json({ error: 'Participants file not found' });
-    try {
-        const info = db.prepare('DELETE FROM participants WHERE event_id = ? AND id = ?').run(ev.id, String(participantId));
-        if (info.changes === 0) {
-            return res.status(404).json({ error: 'Participant not found' });
-        }
-        res.status(200).json({ message: 'Participant deleted' });
-    } catch (e) {
-        res.status(500).json({ error: 'Failed to delete participant' });
-    }
-});
-
-router.put('/:eventId/participants/:participantId', (req, res) => {
-    const folder = req.params.eventId;
-    const participantId = req.params.participantId;
-    const { name, surname, gender, age, email, phone, raceRole } = req.body;
-    const ev = getEventByFolder(folder);
-    if (!ev) return res.status(404).json({ error: 'Participants file not found' });
-
-    try {
-        const info = db.prepare(`
-      UPDATE participants
-      SET name = ?, surname = ?, gender = ?, age = ?, email = ?, phone = ?, race_role = ?
-      WHERE event_id = ? AND id = ?
-    `).run(
-            name || null,
-            surname || null,
-            gender || null,
-            typeof age === 'undefined' || age === '' ? null : Number(age),
-            email || null,
-            phone || null,
-            raceRole || null,
-            ev.id,
-            String(participantId)
-        );
-
-        if (info.changes === 0) {
-            return res.status(404).json({ error: 'Participant not found' });
-        }
-
-        res.status(200).json({ message: 'Participant updated' });
-    } catch (e) {
-        res.status(500).json({ error: 'Failed to update participant' });
     }
 });
 
