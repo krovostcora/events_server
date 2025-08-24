@@ -204,7 +204,7 @@ router.post('/:eventId/results', (req, res) => {
         let lines = [];
         if (!fs.existsSync(resultsPath)) lines.push('raceTime;id');
 
-        // append results in format: raceTime;id
+        // raceTime should be absolute timestamp (ms since epoch)
         lines = lines.concat(results.map(r => `${r.raceTime};${r.id}`));
 
         fs.appendFileSync(resultsPath, lines.join('\n') + '\n');
@@ -214,7 +214,6 @@ router.post('/:eventId/results', (req, res) => {
         res.status(500).json({ error: 'Failed to save results' });
     }
 });
-
 
 // GET /api/events/:id/results
 router.get('/:eventId/results', (req, res) => {
@@ -236,8 +235,7 @@ router.get('/:eventId/results', (req, res) => {
     }
 });
 
-
-// DELETE /api/events/:id/results
+// DELETE /api/events/:id/results/:raceTime
 router.delete('/:eventId/results/:raceTime', (req, res) => {
     const { eventId, raceTime } = req.params;
     const resultsPath = path.join(EVENTS_DIR, eventId, 'results.csv');
