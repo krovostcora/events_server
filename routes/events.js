@@ -190,29 +190,22 @@ router.get('/:id/participants', (req, res) => {
 });
 
 // POST /api/events/:id/results
-router.post('/:id/results', (req, res) => {
-    const { id } = req.params;
-    const results = req.body.results; // [{ id, absoluteTime }]
-    const folderPath = path.join(EVENTS_DIR, id);
+router.post('/:eventId/results', (req, res) => {
+    const { eventId } = req.params;
+    const results = req.body.results; // [{ id, raceTime }]
+    const folderPath = path.join(EVENTS_DIR, eventId);
     const resultsPath = path.join(folderPath, 'results.csv');
 
-    if (!Array.isArray(results)) {
-        return res.status(400).json({ error: 'Results must be an array' });
-    }
+    if (!Array.isArray(results)) return res.status(400).json({ error: 'Results must be an array' });
 
     try {
-        if (!fs.existsSync(folderPath)) {
-            fs.mkdirSync(folderPath, { recursive: true });
-        }
+        if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, { recursive: true });
 
         let lines = [];
-        if (!fs.existsSync(resultsPath)) {
-            // new file with header
-            lines.push('timestamp;id');
-        }
+        if (!fs.existsSync(resultsPath)) lines.push('raceTime;id');
 
-        // append results in format: timestamp;id
-        lines = lines.concat(results.map(r => `${r.absoluteTime};${r.id}`));
+        // append results in format: raceTime;id
+        lines = lines.concat(results.map(r => `${r.raceTime};${r.id}`));
 
         fs.appendFileSync(resultsPath, lines.join('\n') + '\n');
         res.status(200).json({ message: 'Results saved' });
@@ -224,22 +217,18 @@ router.post('/:id/results', (req, res) => {
 
 
 // GET /api/events/:id/results
-router.get('/:id/results', (req, res) => {
-    const { id } = req.params;
-    const resultsPath = path.join(EVENTS_DIR, id, 'results.csv');
-    if (!fs.existsSync(resultsPath)) {
-        return res.json([]);
-    }
+router.get('/:eventId/results', (req, res) => {
+    const { eventId } = req.params;
+    const resultsPath = path.join(EVENTS_DIR, eventId, 'results.csv');
+    if (!fs.existsSync(resultsPath)) return res.json([]);
+
     try {
         const data = fs.readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean);
         const [header, ...rows] = data;
         const fields = header.split(';');
         const results = rows.map(row => {
             const values = row.split(';');
-            const entry = Object.fromEntries(fields.map((f, i) => [f, values[i] || '']));
-            // convert timestamp to ISO for convenience
-            entry.date = new Date(parseInt(entry.timestamp, 10)).toISOString();
-            return entry;
+            return Object.fromEntries(fields.map((f, i) => [f, values[i] || '']));
         });
         res.json(results);
     } catch (err) {
@@ -248,32 +237,29 @@ router.get('/:id/results', (req, res) => {
 });
 
 
-// DELETE /api/events/:id/results/:date
-router.delete('/:id/results/:date', (req, res) => {
-    const { id, date } = req.params;
-    const resultsPath = path.join(EVENTS_DIR, id, 'results.csv');
+// DELETE /api/events/:id/results
+router.delete('/:eventId/results/:raceTime', (req, res) => {
+    const { eventId, raceTime } = req.params;
+    const resultsPath = path.join(EVENTS_DIR, eventId, 'results.csv');
 
-    if (!fs.existsSync(resultsPath)) {
-        return res.status(404).json({ error: 'Results file not found' });
-    }
+    if (!fs.existsSync(resultsPath)) return res.status(404).json({ error: 'Results file not found' });
 
     try {
         const data = fs.readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean);
         const [header, ...rows] = data;
         const updatedRows = rows.filter(row => {
-            const [rowDate] = row.split(';');
-            return rowDate !== date;
+            const [rowRaceTime] = row.split(';');
+            return rowRaceTime !== raceTime;
         });
 
         const newContent = [header, ...updatedRows].join('\n') + '\n';
         fs.writeFileSync(resultsPath, newContent, 'utf8');
-        res.status(200).json({ message: 'Group deleted' });
+        res.status(200).json({ message: 'Result deleted' });
     } catch (err) {
-        console.error('Error deleting group:', err);
-        res.status(500).json({ error: 'Failed to delete result group' });
+        console.error('Error deleting result:', err);
+        res.status(500).json({ error: 'Failed to delete result' });
     }
 });
-
 
 // DELETE /api/events/:eventId/participants/:participantId
 router.delete('/:eventId/participants/:participantId', (req, res) => {
