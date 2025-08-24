@@ -1,9 +1,6 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const cors = require("cors");
-app.use(cors());
-
 
 const router = express.Router();
 const EVENTS_DIR = path.join(__dirname, '..', 'events');
