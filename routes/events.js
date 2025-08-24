@@ -192,11 +192,9 @@ router.get('/:id/participants', (req, res) => {
 // POST /api/events/:id/results
 router.post('/:id/results', (req, res) => {
     const { id } = req.params;
-    const results = req.body.results; // [{ id, time }]
+    const results = req.body.results; // [{ id, absoluteTime }]
     const folderPath = path.join(EVENTS_DIR, id);
     const resultsPath = path.join(folderPath, 'results.csv');
-    const today = new Date();
-    const dateStr = `${String(today.getDate()).padStart(2, '0')}${String(today.getMonth() + 1).padStart(2, '0')}${today.getFullYear()}`;
 
     if (!Array.isArray(results)) {
         return res.status(400).json({ error: 'Results must be an array' });
@@ -207,26 +205,15 @@ router.post('/:id/results', (req, res) => {
             fs.mkdirSync(folderPath, { recursive: true });
         }
 
-        // визначити останній raceId
-        let raceId = 1;
-        if (fs.existsSync(resultsPath)) {
-            const lines = fs.readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean);
-            const [header, ...rows] = lines;
-            const lastRaceIds = rows
-                .map(row => row.split(';'))
-                .filter(cols => cols[0] === dateStr)
-                .map(cols => parseInt(cols[1], 10))
-                .filter(n => !isNaN(n));
-
-            raceId = lastRaceIds.length > 0 ? Math.max(...lastRaceIds) + 1 : 1;
-        }
-
         let lines = [];
         if (!fs.existsSync(resultsPath)) {
-            lines.push('date;raceId;id;time');
+            // new file with header
+            lines.push('timestamp;id');
         }
 
-        lines = lines.concat(results.map(r => `${dateStr};${raceId};${r.id};${r.time}`));
+        // append results in format: timestamp;id
+        lines = lines.concat(results.map(r => `${r.absoluteTime};${r.id}`));
+
         fs.appendFileSync(resultsPath, lines.join('\n') + '\n');
         res.status(200).json({ message: 'Results saved' });
     } catch (err) {
@@ -234,6 +221,7 @@ router.post('/:id/results', (req, res) => {
         res.status(500).json({ error: 'Failed to save results' });
     }
 });
+
 
 // GET /api/events/:id/results
 router.get('/:id/results', (req, res) => {
@@ -248,13 +236,17 @@ router.get('/:id/results', (req, res) => {
         const fields = header.split(';');
         const results = rows.map(row => {
             const values = row.split(';');
-            return Object.fromEntries(fields.map((f, i) => [f, values[i] || '']));
+            const entry = Object.fromEntries(fields.map((f, i) => [f, values[i] || '']));
+            // convert timestamp to ISO for convenience
+            entry.date = new Date(parseInt(entry.timestamp, 10)).toISOString();
+            return entry;
         });
         res.json(results);
     } catch (err) {
         res.status(500).json({ error: 'Failed to read results' });
     }
 });
+
 
 // DELETE /api/events/:id/results/:date
 router.delete('/:id/results/:date', (req, res) => {
