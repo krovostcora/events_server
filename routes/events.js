@@ -254,32 +254,25 @@ router.post('/:eventId/results', (req, res) => {
             fs.mkdirSync(folderPath, { recursive: true });
         }
 
-        let existingIds = new Set();
         let lines = [];
-
         if (fs.existsSync(resultsPath)) {
             const data = fs.readFileSync(resultsPath, 'utf8')
                 .split('\n')
                 .filter(Boolean);
             const [header, ...rows] = data;
             if (header) lines.push(header);
-
-            rows.forEach(row => {
-                const [startTime, finishTime, id] = row.split(';');
-                existingIds.add(id);
-                lines.push(row);
-            });
+            lines = lines.concat(rows);
         } else {
             lines.push('startTime;finishTime;id');
         }
 
-        const newResults = results.filter(r => !existingIds.has(String(r.id)));
-        const newLines = newResults.map(r => `${r.startTime};${r.finishTime};${r.id}`);
-
+        // Додаємо всі результати, незалежно від id
+        const newLines = results.map(r => `${r.startTime};${r.finishTime};${r.id}`);
         lines = lines.concat(newLines);
+
         fs.writeFileSync(resultsPath, lines.join('\n') + '\n', 'utf8');
 
-        res.status(200).json({ message: 'Results saved', added: newResults.length });
+        res.status(200).json({ message: 'Results saved', added: results.length });
     } catch (err) {
         console.error('Error saving results:', err);
         res.status(500).json({ error: 'Failed to save results' });
@@ -306,24 +299,25 @@ router.get('/:eventId/results', (req, res) => {
     }
 });
 
-// DELETE /api/events/:id/results/:id
-router.delete('/:eventId/results/:id', (req, res) => {
-    const { eventId, id } = req.params;
+// DELETE /api/events/:id/results/:id/:startTime
+router.delete('/:eventId/results/:id/:startTime', (req, res) => {
+    const { eventId, id, startTime } = req.params;
     const resultsPath = path.join(EVENTS_DIR, eventId, 'results.csv');
 
-    if (!fs.existsSync(resultsPath)) return res.status(404).json({ error: 'Results file not found' });
+    if (!fs.existsSync(resultsPath))
+        return res.status(404).json({ error: 'Results file not found' });
 
     try {
         const data = fs.readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean);
         const [header, ...rows] = data;
 
         const updatedRows = rows.filter(row => {
-            const [, , rowId] = row.split(';');
-            return rowId !== id;
+            const [rowStartTime, , rowId] = row.split(';');
+            return !(rowId === id && rowStartTime === startTime);
         });
 
         fs.writeFileSync(resultsPath, [header, ...updatedRows].join('\n') + '\n', 'utf8');
-        res.status(200).json({ message: `Result with id=${id} deleted` });
+        res.status(200).json({ message: `Result with id=${id} and startTime=${startTime} deleted` });
     } catch (err) {
         console.error('Error deleting result:', err);
         res.status(500).json({ error: 'Failed to delete result' });
