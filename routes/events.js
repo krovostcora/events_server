@@ -192,23 +192,45 @@ router.get('/:id/participants', (req, res) => {
 // POST /api/events/:id/results
 router.post('/:eventId/results', (req, res) => {
     const { eventId } = req.params;
-    const results = req.body.results; // [{ id, raceTime }]
+    const results = req.body.results; // [{ id, startTime, finishTime }]
     const folderPath = path.join(EVENTS_DIR, eventId);
     const resultsPath = path.join(folderPath, 'results.csv');
 
-    if (!Array.isArray(results)) return res.status(400).json({ error: 'Results must be an array' });
+    if (!Array.isArray(results)) {
+        return res.status(400).json({ error: 'Results must be an array' });
+    }
 
     try {
-        if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, { recursive: true });
+        if (!fs.existsSync(folderPath)) {
+            fs.mkdirSync(folderPath, { recursive: true });
+        }
 
+        let existingIds = new Set();
         let lines = [];
-        if (!fs.existsSync(resultsPath)) lines.push('raceTime;id');
 
-        // raceTime should be absolute timestamp (ms since epoch)
-        lines = lines.concat(results.map(r => `${r.raceTime};${r.id}`));
+        if (fs.existsSync(resultsPath)) {
+            const data = fs.readFileSync(resultsPath, 'utf8')
+                .split('\n')
+                .filter(Boolean);
+            const [header, ...rows] = data;
+            if (header) lines.push(header);
 
-        fs.appendFileSync(resultsPath, lines.join('\n') + '\n');
-        res.status(200).json({ message: 'Results saved' });
+            rows.forEach(row => {
+                const [startTime, finishTime, id] = row.split(';');
+                existingIds.add(id);
+                lines.push(row);
+            });
+        } else {
+            lines.push('startTime;finishTime;id');
+        }
+
+        const newResults = results.filter(r => !existingIds.has(String(r.id)));
+        const newLines = newResults.map(r => `${r.startTime};${r.finishTime};${r.id}`);
+
+        lines = lines.concat(newLines);
+        fs.writeFileSync(resultsPath, lines.join('\n') + '\n', 'utf8');
+
+        res.status(200).json({ message: 'Results saved', added: newResults.length });
     } catch (err) {
         console.error('Error saving results:', err);
         res.status(500).json({ error: 'Failed to save results' });
@@ -229,15 +251,15 @@ router.get('/:eventId/results', (req, res) => {
             const values = row.split(';');
             return Object.fromEntries(fields.map((f, i) => [f, values[i] || '']));
         });
-        res.json(results);
+        res.json(results); // [{ startTime, finishTime, id }]
     } catch (err) {
         res.status(500).json({ error: 'Failed to read results' });
     }
 });
 
-// DELETE /api/events/:id/results/:raceTime
-router.delete('/:eventId/results/:raceTime', (req, res) => {
-    const { eventId, raceTime } = req.params;
+// DELETE /api/events/:id/results/:id
+router.delete('/:eventId/results/:id', (req, res) => {
+    const { eventId, id } = req.params;
     const resultsPath = path.join(EVENTS_DIR, eventId, 'results.csv');
 
     if (!fs.existsSync(resultsPath)) return res.status(404).json({ error: 'Results file not found' });
@@ -245,14 +267,14 @@ router.delete('/:eventId/results/:raceTime', (req, res) => {
     try {
         const data = fs.readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean);
         const [header, ...rows] = data;
+
         const updatedRows = rows.filter(row => {
-            const [rowRaceTime] = row.split(';');
-            return rowRaceTime !== raceTime;
+            const [, , rowId] = row.split(';');
+            return rowId !== id;
         });
 
-        const newContent = [header, ...updatedRows].join('\n') + '\n';
-        fs.writeFileSync(resultsPath, newContent, 'utf8');
-        res.status(200).json({ message: 'Result deleted' });
+        fs.writeFileSync(resultsPath, [header, ...updatedRows].join('\n') + '\n', 'utf8');
+        res.status(200).json({ message: `Result with id=${id} deleted` });
     } catch (err) {
         console.error('Error deleting result:', err);
         res.status(500).json({ error: 'Failed to delete result' });
