@@ -189,6 +189,55 @@ router.get('/:id/participants', (req, res) => {
     }
 });
 
+// DELETE /api/events/:eventId/participants/:participantId
+router.delete('/:eventId/participants/:participantId', (req, res) => {
+    const { eventId, participantId } = req.params;
+    const participantsPath = path.join(EVENTS_DIR, eventId, 'participants.csv');
+
+    if (!fs.existsSync(participantsPath)) {
+        return res.status(404).json({ error: 'Participants file not found' });
+    }
+
+    try {
+        const data = fs.readFileSync(participantsPath, 'utf8').split('\n').filter(Boolean);
+        const [header, ...rows] = data;
+        const filtered = rows.filter(row => !row.startsWith(participantId + ';'));
+        fs.writeFileSync(participantsPath, [header, ...filtered].join('\n') + '\n');
+        res.status(200).json({ message: 'Participant deleted' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to delete participant' });
+    }
+});
+
+// PUT /api/events/:eventId/participants/:participantId
+router.put('/:eventId/participants/:participantId', (req, res) => {
+    const { eventId, participantId } = req.params;
+    const participantsPath = path.join(EVENTS_DIR, eventId, 'participants.csv');
+
+    if (!fs.existsSync(participantsPath)) {
+        return res.status(404).json({ error: 'Participants file not found' });
+    }
+
+    try {
+        const data = fs.readFileSync(participantsPath, 'utf8').split('\n').filter(Boolean);
+        const [header, ...rows] = data;
+        const updatedRows = rows.map(row => {
+            if (!row.startsWith(participantId + ';')) return row;
+            const {
+                name, surname, gender, age, email, phone, raceRole
+            } = req.body;
+            return [
+                participantId, name, surname, gender, age, email, phone, raceRole || ''
+            ].join(';');
+        });
+        fs.writeFileSync(participantsPath, [header, ...updatedRows].join('\n') + '\n');
+        res.status(200).json({ message: 'Participant updated' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update participant' });
+    }
+});
+
+
 // POST /api/events/:id/results
 router.post('/:eventId/results', (req, res) => {
     const { eventId } = req.params;
@@ -278,54 +327,6 @@ router.delete('/:eventId/results/:id', (req, res) => {
     } catch (err) {
         console.error('Error deleting result:', err);
         res.status(500).json({ error: 'Failed to delete result' });
-    }
-});
-
-// DELETE /api/events/:eventId/participants/:participantId
-router.delete('/:eventId/participants/:participantId', (req, res) => {
-    const { eventId, participantId } = req.params;
-    const participantsPath = path.join(EVENTS_DIR, eventId, 'participants.csv');
-
-    if (!fs.existsSync(participantsPath)) {
-        return res.status(404).json({ error: 'Participants file not found' });
-    }
-
-    try {
-        const data = fs.readFileSync(participantsPath, 'utf8').split('\n').filter(Boolean);
-        const [header, ...rows] = data;
-        const filtered = rows.filter(row => !row.startsWith(participantId + ';'));
-        fs.writeFileSync(participantsPath, [header, ...filtered].join('\n') + '\n');
-        res.status(200).json({ message: 'Participant deleted' });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to delete participant' });
-    }
-});
-
-// PUT /api/events/:eventId/participants/:participantId
-router.put('/:eventId/participants/:participantId', (req, res) => {
-    const { eventId, participantId } = req.params;
-    const participantsPath = path.join(EVENTS_DIR, eventId, 'participants.csv');
-
-    if (!fs.existsSync(participantsPath)) {
-        return res.status(404).json({ error: 'Participants file not found' });
-    }
-
-    try {
-        const data = fs.readFileSync(participantsPath, 'utf8').split('\n').filter(Boolean);
-        const [header, ...rows] = data;
-        const updatedRows = rows.map(row => {
-            if (!row.startsWith(participantId + ';')) return row;
-            const {
-                name, surname, gender, age, email, phone, raceRole
-            } = req.body;
-            return [
-                participantId, name, surname, gender, age, email, phone, raceRole || ''
-            ].join(';');
-        });
-        fs.writeFileSync(participantsPath, [header, ...updatedRows].join('\n') + '\n');
-        res.status(200).json({ message: 'Participant updated' });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to update participant' });
     }
 });
 
