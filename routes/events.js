@@ -135,6 +135,54 @@ router.post('/', (req, res) => {
     }
 });
 
+// PUT /api/events/:id (Edit event)
+router.put('/:id', (req, res) => {
+    const { id } = req.params;
+    const {
+        name, date, time, place, isRace,
+        ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction, description
+    } = req.body;
+
+    const folderPath = path.join(EVENTS_DIR, id);
+    const csvPath = path.join(folderPath, `${id}.csv`);
+
+    if (!fs.existsSync(csvPath)) {
+        return res.status(404).json({ error: 'Event not found' });
+    }
+
+    try {
+        // Overwrite the CSV with new data
+        const header = 'id;name;date;time;place;isRace;ageLimit;maxChildAge;medicalRequired;teamEvent;genderRestriction;description\n';
+        const line = [
+            id, name, date, time, place, isRace,
+            ageLimit, maxChildAge, medicalRequired, teamEvent, genderRestriction, description
+        ].join(';');
+        fs.writeFileSync(csvPath, header + line + '\n');
+        res.json({ message: 'Event updated' });
+    } catch (err) {
+        console.error('Error updating event:', err);
+        res.status(500).json({ error: 'Failed to update event' });
+    }
+});
+
+// DELETE /api/events/:id (Delete event)
+router.delete('/:id', (req, res) => {
+    const { id } = req.params;
+    const folderPath = path.join(EVENTS_DIR, id);
+
+    if (!fs.existsSync(folderPath)) {
+        return res.status(404).json({ error: 'Event not found' });
+    }
+
+    try {
+        fs.rmSync(folderPath, { recursive: true, force: true });
+        res.json({ message: 'Event deleted' });
+    } catch (err) {
+        console.error('Error deleting event:', err);
+        res.status(500).json({ error: 'Failed to delete event' });
+    }
+});
+
 // POST /api/events/:id/register
 router.post('/:id/register', (req, res) => {
     const { id } = req.params;
@@ -236,7 +284,6 @@ router.put('/:eventId/participants/:participantId', (req, res) => {
         res.status(500).json({ error: 'Failed to update participant' });
     }
 });
-
 
 // POST /api/events/:id/results
 router.post('/:eventId/results', (req, res) => {
