@@ -267,6 +267,7 @@ router.delete('/:eventId/participants/:participantId', (req, res) => {
     }
 });
 
+
 // PUT /api/events/:eventId/participants/:participantId
 router.put('/:eventId/participants/:participantId', (req, res) => {
     const { eventId, participantId } = req.params;
