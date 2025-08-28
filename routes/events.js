@@ -237,7 +237,6 @@ router.get('/:id/participants', (req, res) => {
     }
 });
 
-// DELETE /api/events/:eventId/participants/:participantId
 router.delete('/:eventId/participants/:participantId', (req, res) => {
     const { eventId, participantId } = req.params;
     const participantsPath = path.join(EVENTS_DIR, eventId, 'participants.csv');
@@ -249,13 +248,19 @@ router.delete('/:eventId/participants/:participantId', (req, res) => {
     try {
         const data = fs.readFileSync(participantsPath, 'utf8').split('\n').filter(Boolean);
         const [header, ...rows] = data;
-        const filtered = rows.filter(row => !row.startsWith(participantId + ';'));
+
+        const filtered = rows.filter(row => {
+            const [id] = row.split(';');
+            return id !== participantId;
+        });
+
         fs.writeFileSync(participantsPath, [header, ...filtered].join('\n') + '\n');
         res.status(200).json({ message: 'Participant deleted' });
     } catch (err) {
         res.status(500).json({ error: 'Failed to delete participant' });
     }
 });
+
 
 // PUT /api/events/:eventId/participants/:participantId
 router.put('/:eventId/participants/:participantId', (req, res) => {
