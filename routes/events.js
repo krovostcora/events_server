@@ -9,6 +9,28 @@ if (!fs.existsSync(EVENTS_DIR)) {
     fs.mkdirSync(EVENTS_DIR);
 }
 
+const findFolderByEventId = (eventId) => {
+    const folders = fs.readdirSync(EVENTS_DIR).filter(name => {
+        const fullPath = path.join(EVENTS_DIR, name);
+        return fs.statSync(fullPath).isDirectory();
+    });
+
+    for (const folder of folders) {
+        const csvPath = path.join(EVENTS_DIR, folder, `${folder}.csv`);
+        if (!fs.existsSync(csvPath)) continue;
+
+        const data = fs.readFileSync(csvPath, 'utf8').split('\n').filter(Boolean);
+        if (data.length < 2) continue;
+
+        const firstDataRow = data[1].split(';');
+        const id = firstDataRow[0];
+        if (id === eventId) return folder;
+    }
+
+    return null;
+};
+
+
 // GET /api/events
 router.get('/', (req, res) => {
     try {
@@ -240,32 +262,27 @@ router.get('/:id/participants', (req, res) => {
 // DELETE /api/events/:eventId/participants/:participantId
 router.delete('/:eventId/participants/:participantId', (req, res) => {
     const { eventId, participantId } = req.params;
-    console.log('DELETE request received:', eventId, participantId); // <-- лог
-    const participantsPath = path.join(EVENTS_DIR, eventId, 'participants.csv');
 
-    if (!fs.existsSync(participantsPath)) {
-        console.log('Participants file not found'); // <-- лог
-        return res.status(404).json({ error: 'Participants file not found' });
-    }
+    const folder = findFolderByEventId(eventId);
+    if (!folder) return res.status(404).json({ error: 'Event not found' });
+
+    const participantsPath = path.join(EVENTS_DIR, folder, 'participants.csv');
+    if (!fs.existsSync(participantsPath)) return res.status(404).json({ error: 'Participants file not found' });
 
     try {
         const data = fs.readFileSync(participantsPath, 'utf8').split('\n').filter(Boolean);
         const [header, ...rows] = data;
 
-        const filtered = rows.filter(row => {
-            const [id] = row.split(';');
-            console.log('Checking row id:', id);
-            return id !== participantId;
-        });
+        const filtered = rows.filter(row => row.split(';')[0] !== participantId);
 
         fs.writeFileSync(participantsPath, [header, ...filtered].join('\n') + '\n');
-        console.log('Participant deleted successfully');
         res.status(200).json({ message: 'Participant deleted' });
     } catch (err) {
         console.error('Failed to delete participant:', err);
         res.status(500).json({ error: 'Failed to delete participant' });
     }
 });
+
 
 // PUT /api/events/:eventId/participants/:participantId
 router.put('/:eventId/participants/:participantId', (req, res) => {
