@@ -1,8 +1,8 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../prismaClient');
 
 const router = express.Router();
-const prisma = new PrismaClient({});
+
 
 // GET /api/events
 router.get('/', async (req, res) => {
