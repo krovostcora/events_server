@@ -1,0 +1,44 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Event {
+  id           String        @id @default(uuid())
+  name         String
+  date         String
+  time         String?
+  place        String?
+  isRace       Boolean?
+  description  String?
+  logo         String?
+  participants Participant[]
+  results      Result[]
+}
+
+model Participant {
+  id       String   @id @default(uuid())
+  name     String
+  surname  String
+  email    String
+  age      Int?
+  gender   String?
+  phone    String?
+  raceRole String?
+  eventId  String
+  event    Event    @relation(fields: [eventId], references: [id])
+  results  Result[]
+}
+
+model Result {
+  id            String      @id @default(uuid())
+  finishTime    String
+  date          String
+  participantId String
+  participant   Participant @relation(fields: [participantId], references: [id])
+  eventId       String
+  event         Event       @relation(fields: [eventId], references: [id])
+}
